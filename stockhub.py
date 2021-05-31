@@ -15,11 +15,18 @@ import pandas as pd
 import gm.api as gm
 import glob
 import yfinance as yf
+import MetaTrader5 as mt5
 
 gm.set_token('0147eee0d2783671c80d7a618d3fa7a6cc7c9778')
+ic_path = "C:\\Program Files\\ICMarkets - MetaTrader 5\\terminal64.exe"
+xm_path = "C:\\Program Files\\XM MT5\\terminal64.exe"
+if not mt5.initialize(path=xm_path):
+    print("initialize() failed")
 
 list_of_files = glob.glob(f'data/*-last.csv')
+print('files', list_of_files)
 markets = [x.split('-')[0].split('\\')[1] for x in list_of_files]
+print('marets:', markets)
 markets_df = {}
 
 tv_style = {'width': '90%', 'height':'500px', "marginLeft": "5%", "marginRight": "5%"}
@@ -116,22 +123,34 @@ def update_figure(market):
     Input('symbols-graph', 'clickData'),
     Input('market', 'value'))
 def update_figure(data, market):
-    print('update_figure', market)
+    print('update_figure', market, data)
     if data is None:
         return {}
-    if market != 'hongkong' and market != 'future':
-        return {}
-
     if market == 'hongkong':
         symbol = data['points'][0]['customdata'][1]
         symbol = '0'*(4-len(symbol)) + symbol + '.' + 'HK'
         df = yf.Ticker(symbol).history(period='5y')
-    else:
+    elif market == 'future':
         symbol = data['points'][0]['customdata'][0] + '.' + data['points'][0]['customdata'][1]
         df = gm.history_n(symbol=symbol, frequency='1d', count=1000, fields='open,close,high,low',
             fill_missing='Last', adjust=gm.ADJUST_PREV, end_time=datetime.now(), df=True)
         df.rename(columns={'close': 'Close', 'high':'High', 'low':'Low', 'open':'Open'}, inplace=True)
         print('update_figure', df)
+    elif 'mt5' in market:
+        symbol = data['points'][0]['customdata'][1]
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 1000,)
+        if (rates is None or len(rates) <= 0):
+            print('failed to get', symbol)
+            return {}
+        
+        df = pd.DataFrame(rates)
+        df.rename(columns={'close': 'Close', 'high':'High', 'low':'Low', 'open':'Open'}, inplace=True)
+        print(df)
+        df.index = pd.to_datetime(df['time'], unit='s')
+        
+    else:
+        return {}
+
     # print(df)
     df['MA250'] = df.Close.rolling(250).mean()
 
@@ -151,7 +170,7 @@ def update_figure(data, market):
     Output('stock-graph', 'style'),
     Input('market', 'value'))
 def hide_graph(market):
-    if market == 'hongkong' or market == 'future':
+    if market == 'hongkong' or market == 'future' or 'mt5' in market:
         return {'display':'none'}, tv_style
     else:
         return tv_style, {'display':'none'}

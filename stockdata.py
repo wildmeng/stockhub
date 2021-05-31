@@ -1,12 +1,20 @@
 
 import glob
 import os
+from pathlib import Path
 import gm.api as gm
 from datetime import datetime, timedelta
 import pandas as pd
 import yfinance as yf
+import MetaTrader5 as mt5
 
 gm.set_token('0147eee0d2783671c80d7a618d3fa7a6cc7c9778')
+
+ic_path = "C:\\Program Files\\ICMarkets - MetaTrader 5\\terminal64.exe"
+xm_path = "C:\\Program Files\\XM MT5\\terminal64.exe"
+if not mt5.initialize(path=xm_path):
+    print("initialize() failed")
+    mt5.shutdown()
 
 def download_yh(exchange, code, period):
     t = datetime.now() - timedelta(days=3*365)
@@ -34,6 +42,19 @@ def download_yh(exchange, code, period):
         print('failed to download ', code)
         return None
 
+def download_mt5(exchange, code, period):
+    try:
+        rates = mt5.copy_rates_from_pos(code, mt5.TIMEFRAME_D1, 0, 800,)
+        if len(rates) == 0:
+            print('failed to download ', code)
+            return None
+        else:
+            print('downloaded ', code)
+            return pd.DataFrame(rates)
+    except Exception:
+        print('failed to download ', code)
+        return None
+
 def download_china(exchange, code, period):
     today = datetime.now()
 
@@ -44,7 +65,8 @@ def download_china(exchange, code, period):
             fill_missing='Last', adjust=gm.ADJUST_PREV, end_time=today, df=True)
 
 def do(market, downloader):
-    list_of_files = glob.glob(f'C:/Users/Administrator/Downloads/{market}*.csv')
+    home = str(Path.home())
+    list_of_files = glob.glob(f'{home}\\Downloads\\{market}*.csv')
     latest_file = max(list_of_files, key=os.path.getctime)
     print(latest_file)
     df = pd.read_csv(latest_file, dtype={'商品代码':'string'})
@@ -94,6 +116,7 @@ def do(market, downloader):
     df.to_csv(f'data/{market}-last.csv', index=False)
     print(df.head(10))
 
+do('xm-cfd', download_mt5)
 #do('future', download_china)
 #do('hongkong', download_yh)
 #do('china', download_china)
