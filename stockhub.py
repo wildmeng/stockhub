@@ -7,10 +7,8 @@ import dash_html_components as html
 from dash.dependencies import Input, Output
 from dash_html_components.S import S
 from dash_html_components.Script import Script
-from numpy import tile
 import plotly.express as px
 import plotly.graph_objects as go
-import json
 import pandas as pd
 import gm.api as gm
 import glob
