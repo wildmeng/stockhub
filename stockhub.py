@@ -7,20 +7,22 @@ import dash_html_components as html
 from dash.dependencies import Input, Output
 from dash_html_components.S import S
 from dash_html_components.Script import Script
+from numpy import tile
 import plotly.express as px
 import plotly.graph_objects as go
+import json
 import pandas as pd
 import gm.api as gm
 import glob
 import yfinance as yf
 import MetaTrader5 as mt5
-
+'''
 gm.set_token('0147eee0d2783671c80d7a618d3fa7a6cc7c9778')
 ic_path = "C:\\Program Files\\ICMarkets - MetaTrader 5\\terminal64.exe"
 xm_path = "C:\\Program Files\\XM MT5\\terminal64.exe"
 if not mt5.initialize(path=xm_path):
     print("initialize() failed")
-
+'''
 list_of_files = glob.glob(f'data/*-last.csv')
 print('files', list_of_files)
 markets = [x.split('-')[0].split('\\')[1] for x in list_of_files]

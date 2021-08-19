@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import yfinance as yf
 import MetaTrader5 as mt5
+import pnf
 
 gm.set_token('0147eee0d2783671c80d7a618d3fa7a6cc7c9778')
 
@@ -15,7 +16,7 @@ xm_path = "C:\\Program Files\\XM MT5\\terminal64.exe"
 if not mt5.initialize(path=xm_path):
     print("initialize() failed")
     mt5.shutdown()
-
+  
 def download_yh(exchange, code, period):
     t = datetime.now() - timedelta(days=3*365)
     if exchange == 'HKEX':

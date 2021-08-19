@@ -1,4 +1,13 @@
 
+import pnf
+import glob
+
+import plotly.express as px
+from itertools import cycle
+import pandas as pd
+import yfinance as yf
+import utils
+
 from datetime import datetime
 from enum import unique
 import dash
@@ -7,105 +16,131 @@ import dash_html_components as html
 from dash.dependencies import Input, Output
 from dash_html_components.S import S
 from dash_html_components.Script import Script
-import plotly.express as px
-import plotly.graph_objects as go
-import pandas as pd
-import gm.api as gm
-import pnf
-import yfinance as yf
-import MetaTrader5 as mt5
+import dash_table
+import numpy as np
+import dash_bootstrap_components as dbc
 
-gm.set_token('0147eee0d2783671c80d7a618d3fa7a6cc7c9778')
-ic_path = "C:\\Program Files\\ICMarkets - MetaTrader 5\\terminal64.exe"
-xm_path = "C:\\Program Files\\XM MT5\\terminal64.exe"
-if not mt5.initialize(path=xm_path):
-    print("initialize() failed")
 
-tv_style = {'width': '90%', 'height':'500px', "marginLeft": "5%", "marginRight": "5%"}
+list_of_files = glob.glob(f'data/*-last.csv')
+print(list_of_files)
+markets = [x.rsplit('-', 1)[0].split('\\')[1] for x in list_of_files]
+print('markets:', markets)
+markets_df = {}
+for i, v in enumerate(list_of_files):
+    df = pd.read_csv(v, dtype={'商品代码':'string'})
+    df = df[df['target'] > 30]
+    markets_df[markets[i]] = df
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
-app.layout = html.Div([
-    dcc.Input(id='symbol', value='000001.SS', type='text'),
-    dcc.Checklist(
-        id='charts',
-        options=[
-            {'label': 'TradingView', 'value': 'TV'},
-        ],
-        value=['TV']
-    ),
-    dcc.Graph(
-        id='pnf-graph', style=tv_style, config={'scrollZoom':True}
-    ),
-    html.Div(id='tradingview-graph', style={'width': '90%', 'height':'450px', 'marginLeft': '5%', "marginRight": "5%"}),
-    
-    html.Div(id='null', style={'height':'100px'}),
-    ])
-
-app.clientside_callback(
-    """
-    function(charts) {
-        if (charts.length <= 0) {
-            return ''
-        }
-
-        function create_tv() {
-            new TradingView.widget(
-            {
-            "autosize": true,
-            "symbol": "SSE:000001",
-            "timezone": "Asia/Shanghai",
-            "interval": "D",
-            "theme": "light",
-            "style": "1",
-            "locale": "zh_CN",
-            "toolbar_bg": "#f1f3f6",
-            "enable_publishing": false,
-            "range": "12M",
-            "details": true,
-            "allow_symbol_change": true,
-            "hide_side_toolbar": false,
-            "studies": [
-            "MASimple@tv-basicstudies"
-            ],
-            //"watchlist": symbols,
-            "container_id": "tradingview-graph"
-        });
-    }
-
-    if (typeof TradingView === 'undefined') {
-        var script = document.createElement('script');
-        script.onload = create_tv
-        script.src = "https://s3.tradingview.com/tv.js";
-        document.head.appendChild(script);
-    } else {
-        create_tv()
-    }
-
-    return ''
-    }
-    """,
-    Output(component_id='null', component_property='children'),
-    Input('charts', 'value')
+controls = dbc.Card(
+    [
+        dbc.FormGroup(
+            [
+                dbc.Label("Country"),
+                dcc.Dropdown(
+                    id="country",
+                    options=[
+                        {'label': i, 'value': i} for i in ['china', 'america']],
+                    value="china",
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label("BoxSize"),
+                dcc.Input(
+                    id="BoxSize",
+                    type='number', min=1, max=20,
+                    value="3",
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label("Reverse"),
+                dcc.Input(
+                    id="Reverse",
+                    type='number', min=1, max=5,
+                    value="3",
+                ),
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label("MinTarget"),
+                dcc.Input(
+                    id="MinTarget",
+                    type='number', min=1, max=5,
+                    value="30",
+                ),
+            ]
+        ),
+    ],
+    body=True,
 )
 
+
+app.layout = dbc.Container(
+    [
+        dbc.Row(
+            [
+                dbc.Col(controls, md=2),
+                dbc.Col(html.Div(id='stock-table'), md=2),
+                dbc.Col(dcc.Graph(id="pnf-graph"), md=8),
+            ],
+            align="top",
+        ),
+    ],
+    fluid=True,
+)
+
+current_table_df = None
+
 @app.callback(
-    Output('tradingview-graph', 'style'),
-    Input('charts', 'value'))
-def hide_graph(charts):
-    if len(charts) > 0:
-        return tv_style
-    else:
-        return {'display':'none'}
+    Output('stock-table', 'children'),
+    Input('country', 'value'),
+    Input('MinTarget', 'value'),)
+def select_country(country, min_target):
+    global current_table_df
+    df = markets_df[country]
+    df = df[df['target'] > int(min_target)]
+    df = df[["说明", "商品代码", "target"]]
+    current_table_df = df
+
+    return [
+        dash_table.DataTable(
+        id='stock_table',
+        #filter_action="native",
+        #row_selectable='single',
+        #page_size=30,
+        #style_as_list_view=True,
+        fixed_rows={'headers': True},
+        #style_table={'overflowY': 'auto', 'overflowX': 'auto', 'display': 'inline-block'},
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+        style_cell={'textAlign': 'center'})]
 
 @app.callback(
     Output('pnf-graph', 'figure'),
-    Input('symbol', 'value'))
-def update_figure(symbol):
-    fig = pnf.plot_pnf(symbol, return_figure=True)
+    Input('BoxSize', 'value'),
+    Input('Reverse', 'value'),
+    Input('stock_table', 'selected_cells'))
+def update_figure(box, reverse, row):
+    if row == None:
+        return {}
+    info = current_table_df.iloc[row[0]['row']]
+    code = info['商品代码']
+    if code.startswith('6'):
+        symbol = 'SHSE.' + code
+    else:
+        symbol = 'SZSE.' + code
+    print(symbol)
+    fig = pnf.plot_pnf(symbol, int(box), int(reverse), return_figure=True)
     fig.update_layout(dragmode='pan')
+    # fig.update_yaxes(fixedrange=True)
     return fig
-    
+
+
 if __name__ == '__main__':
-    app.run_server(debug=True, port=80, host='127.0.0.1')
+    app.run_server(debug=True, host='127.0.0.1', port=80)
