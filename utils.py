@@ -19,3 +19,57 @@ def get_yh_symbol(row):
 def get_yh_symbols(df):
     symbols = df.apply(get_yh_symbol, axis=1)
     return list(symbols)
+
+
+def _splitSymbol(symbol):
+    sep = '.'
+    if ':' in symbol:
+        sep = ':'
+    
+    code = symbol.split(sep)[1]
+    market = symbol.split(sep)[0]
+    return market, code
+    
+class MyStocks:
+    def __init__(self):
+        self.df = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string'}, delimiter=',', index_col=False)
+        print('constructor', self.df)
+
+    def update(self, symbol, item, value):
+        market, code = _splitSymbol(symbol)
+        code_list = self.df['商品代码']
+        if code in code_list.values:
+            self.df.loc[(self.df['商品代码'] == code), item] = value
+        else:
+            if market == 'SHSE':
+                market = 'SSE'
+            row = {"交易所":market, "商品代码":code, item:value, }
+            self.df = self.df.append(row, ignore_index=True, )
+        
+    def addStock(self, symbol):
+        market, code = _splitSymbol(symbol)
+        code_list = self.df['商品代码']
+        if code in code_list.values:
+            print('already in the list')
+            return
+
+        if market == 'SHSE':
+            market = 'SSE'
+            
+        row = {"交易所":market, "商品代码":code,}
+        self.df = self.df.append(row, ignore_index=True, )
+
+    def delStock(self, symbol):
+        market, code = _splitSymbol(symbol)
+        code_list = self.df['商品代码']
+        if code not in code_list.values:
+            print('not in the list')
+            return
+
+        self.df = self.df[self.df['商品代码'] != code]
+        print(self.df)
+
+    def flush(self):
+        self.df.fillna(0, inplace=True)
+        print(self.df)
+        self.df.to_csv('data/my-list.csv', index=False)
