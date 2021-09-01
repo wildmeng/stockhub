@@ -1,15 +1,22 @@
 # coding=utf-8
 from __future__ import print_function, absolute_import
 from gm.api import *
-from gm.enum import MODE_LIVE
+from gm.enum import MODE_LIVE, OrderSide_Sell
+import numpy as np
 import pandas as pd
 import utils
+import json
 
 def updateStocks(context):
     stocks = utils.MyStocks()
+    cash = context.account().cash
+
+    print('cash:', cash.market_value, cash.nav, cash.available)
+    
     positions = context.account().positions()
     for pos in positions:
-        stocks.update(pos['symbol'], '持有数量', pos['volume'])
+        stocks.update(pos['symbol'], '持有数量', int(pos['volume']))
+        stocks.update(pos['symbol'], '持有市值', int(pos['market_value']*100/cash.nav))
     
     stocks.flush()
 def init(context):
@@ -18,19 +25,25 @@ def init(context):
     # date_rule执行频率，目前暂时支持1d、1w、1m，其中1w、1m仅用于回测，实时模式1d以上的频率，需要在algo判断日期
     # time_rule执行时间， 注意多个定时任务设置同一个时间点，前面的定时任务会被后面的覆盖 
     updateStocks(context)
-    
-    schedule(schedule_func=algo, date_rule='1d', time_rule='14:22:00')
+    schedule(schedule_func=trade, date_rule='1d', time_rule='09:31:00')
+    schedule(schedule_func=updateStocks, date_rule='1d', time_rule='09:00:00')
+    schedule(schedule_func=updateStocks, date_rule='1d', time_rule='15:00:00')
 
+def trade(context):
+    stocks = utils.MyStocks()
+    changes = stocks.getChangeList()
+    for change in changes:
+        sym = change[0]
+        percent = int(change[1])/100.0
+        print('ajust volume, ', sym, percent, '%')
+        result = order_target_percent(symbol=sym, percent=percent, position_side=PositionSide_Long,
+                    order_type=OrderType_Market, price=0)
+        
+        if result.Status == OrderStatus_Filled:
+            stocks.update(sym, '调仓至', np.nan)
+            print('Successful')
 
-def algo(context):
-    print('started trading ...')
-    acc = context.account(account_id=None).cash
-    print(acc)
-    # 以市价购买200股浦发银行股票， price在市价类型不生效
-    res = order_volume(symbol='SHSE.603309', volume=200, side=OrderSide_Buy,
-                 order_type=OrderType_Market, position_effect=PositionEffect_Open, price=0)
-
-    print(res)
+    stocks.flush()
 
 if __name__ == '__main__':
     '''

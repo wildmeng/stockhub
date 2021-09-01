@@ -131,11 +131,13 @@ def get_cfd():
 all_ouputs = [Output('symbols', 'children')] + [Output(f'div{i}', 'children') for i in range(n_col*n_row)]
 
 def get_pos_div(i, row):
-    vol = row['持有数量']
-    return [html.Label(f'持仓:{vol}'), 
-    html.Label('增减仓: ', style={"margin-left": "15px"}), 
-    dcc.Input(id={'type':'change', 'index':i}, type='number', value=row['增减仓'],style={'width':'10%'}), 
-    html.Label('目标价: ', style={"margin-left": "15px"}), 
+    #vol = row['持有数量']
+    value = int(row['持有市值'])
+    return [html.Label(f'{value}%'),
+    html.Label('调仓至: ', style={"margin-left": "15px"}), 
+    dcc.Input(id={'type':'change', 'index':i}, type='number', value=row['调仓至'],style={'width':'10%'}),
+    html.Label('%'),
+    html.Label('目标价: ', style={"margin-left": "15px"}),
     dcc.Input(id={'type':'target', 'index':i}, type='number', value=row['目标价'],style={'width':'10%'}),
     html.Label('止损价: ', style={"margin-left": "15px"}), 
     dcc.Input(id={'type':'stoploss', 'index':i}, type='number', value=row['止损价'],style={'width':'10%'}),
@@ -181,7 +183,7 @@ def action_handler(action, symbol, value):
     print(action, symbol, value)
     stocks = utils.MyStocks()
     if action == 'change':
-        stocks.update(symbol, '增减仓', value)
+        stocks.update(symbol, '调仓至', value)
     elif action == 'target':
         stocks.update(symbol, '目标价', value)
     elif action == 'stoploss':

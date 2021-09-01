@@ -2,6 +2,7 @@ import glob
 import os
 from pathlib import Path
 import pandas as pd
+import math
 
 def read_latest_csv(prefix='china'):
     home = str(Path.home())
@@ -29,7 +30,7 @@ def _splitSymbol(symbol):
     code = symbol.split(sep)[1]
     market = symbol.split(sep)[0]
     return market, code
-    
+
 class MyStocks:
     def __init__(self):
         self.df = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string'}, delimiter=',', index_col=False)
@@ -56,7 +57,7 @@ class MyStocks:
         if market == 'SHSE':
             market = 'SSE'
             
-        row = {"交易所":market, "商品代码":code,}
+        row = {"交易所":market, "商品代码":code}
         self.df = self.df.append(row, ignore_index=True, )
 
     def delStock(self, symbol):
@@ -70,6 +71,27 @@ class MyStocks:
         print(self.df)
 
     def flush(self):
-        self.df.fillna(0, inplace=True)
-        print(self.df)
+        #self.df.fillna(0, inplace=True)
+        #print(self.df)
         self.df.to_csv('data/my-list.csv', index=False)
+
+    
+    def _makeSymbol(self, row):
+        market = row['交易所']
+        if market == 'SSE':
+            market = 'SHSE'
+
+        return market + '.' + row['商品代码']
+
+    def getChangeList(self):
+        result = []
+        for index, row in self.df.iterrows():
+            value = (row['调仓至'])
+            if math.isnan(value) or value == '':
+                continue
+            result.append([self._makeSymbol(row), value])
+        return result
+
+if __name__ == "__main__":
+    stocks = MyStocks()
+    print(stocks.getChangeList())
