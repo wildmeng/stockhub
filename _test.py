@@ -10,8 +10,9 @@ import utils
 import numpy as np
 import pandas as pd
 import json
+import math
 
-n_col = 3
+n_col = 2
 n_row = 20
 
 tabs_name = '行业'
@@ -29,7 +30,7 @@ tabs = dbc.Tabs(
                 dbc.Tab(label=x, tab_id=x)  for x in industries
             ],
             id="tabs",
-            active_tab= industries[0] #'持有'# industries[0],
+            active_tab= '持有'# industries[0],
         )
 def cell(row, col):
     id = (row-1)*n_col + (col-1)
@@ -71,7 +72,7 @@ app.clientside_callback(
             "locale": "zh_CN",
             "toolbar_bg": "#f1f3f6",
             "enable_publishing": false,
-            "range": "24M",
+            "range": "60M",
             "details": false,
             "allow_symbol_change": false,
             "hide_side_toolbar": true,
@@ -119,10 +120,10 @@ def get_crypts():
     cryp_df = utils.read_latest_csv('crypto')
     
     cryp_df = cryp_df[cryp_df['说明'].str.endswith('US Dollar (calculated by TradingView)')]
-    print(cryp_df)
+    #print(cryp_df)
     cryptos = cryp_df.sort_values(by=['市场价值'], ascending=False).head(n_col*n_row)
     results = cryptos.apply(get_sym, axis=1).to_list()
-
+    print(results)
     return (results)
 
 def get_cfd():
@@ -132,8 +133,13 @@ all_ouputs = [Output('symbols', 'children')] + [Output(f'div{i}', 'children') fo
 
 def get_pos_div(i, row):
     #vol = row['持有数量']
-    value = int(row['持有市值'])
-    return [html.Label(f'{value}%'),
+    value = (row['持有市值'])
+    if math.isnan(value):
+        value = 0
+    else:
+        value = int(value)
+
+    return [html.Label(f'持有{value}%'),
     html.Label('调仓至: ', style={"margin-left": "15px"}), 
     dcc.Input(id={'type':'change', 'index':i}, type='number', value=row['调仓至'],style={'width':'10%'}),
     html.Label('%'),
@@ -218,4 +224,4 @@ def handler(*args):
         return
     
 if __name__ == '__main__':
-    app.run_server(debug=True, host='127.0.0.1', port=8888,dev_tools_ui=True,dev_tools_props_check=True)
+    app.run_server(debug=True, host='0.0.0.0', port=8888,dev_tools_ui=True,dev_tools_props_check=True)

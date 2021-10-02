@@ -21,7 +21,6 @@ def get_yh_symbols(df):
     symbols = df.apply(get_yh_symbol, axis=1)
     return list(symbols)
 
-
 def _splitSymbol(symbol):
     sep = '.'
     if ':' in symbol:
@@ -34,7 +33,13 @@ def _splitSymbol(symbol):
 class MyStocks:
     def __init__(self):
         self.df = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string'}, delimiter=',', index_col=False)
-        print('constructor', self.df)
+
+    def getAllSymbols(self):
+        return self.df.apply(lambda row: self._makeSymbol(row), axis=1).to_list()
+
+    def get(self, sym, item):
+        market, code = _splitSymbol(sym)
+        return self.df.loc[(self.df['商品代码'] == code), item].values[0]
 
     def update(self, symbol, item, value):
         market, code = _splitSymbol(symbol)
@@ -86,12 +91,36 @@ class MyStocks:
     def getChangeList(self):
         result = []
         for index, row in self.df.iterrows():
-            value = (row['调仓至'])
-            if math.isnan(value) or value == '':
+            change = (row['调仓至'])
+            value = row['持有市值']
+            if math.isnan(change) or change == '':
                 continue
-            result.append([self._makeSymbol(row), value])
+            result.append([self._makeSymbol(row), change, value])
+        result.sort(reverse=True, key=lambda x: x[2] - x[1])
+        return result
+
+    def getWatchList(self):
+        result = []
+        for index, row in self.df.iterrows():
+            avail = (row['可用数量'])
+            if avail <= 0:
+                continue
+            
+            target = (row['目标价'])
+            stop = (row['止损价'])
+            value = row['持有市值']
+            if math.isnan(value) or value == 0 or value == '0':
+                continue
+
+            if math.isnan(target) and math.isnan(stop):
+                continue
+            if target == 0 and stop == 0 or target == '0' and stop == '0':
+                continue
+
+            result.append(self._makeSymbol(row))
+            
         return result
 
 if __name__ == "__main__":
     stocks = MyStocks()
-    print(stocks.getChangeList())
+    print(stocks.get('SSE.600538', '止损价'))
