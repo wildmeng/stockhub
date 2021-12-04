@@ -19,6 +19,7 @@ import pnf
 
 
 df = pd.read_csv('data/china-last.csv', dtype={'商品代码':'string'})
+
 df.sort_values(by=['accums'], inplace=True, ascending=False)
 df_data = df
 app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -66,7 +67,7 @@ app.layout = dbc.Container(
                 dbc.Col(controls, md=2),
                 dbc.Col(dcc.Graph(id="symbols-graph"), md=4),
                 dbc.Col(dcc.Graph(id="stocks-graph"), md=5),
-                
+
             ],
             align="top",
             no_gutters = True
@@ -141,7 +142,7 @@ def update_figure(minAccum):
 
 @app.callback(
     Output('stocks-graph', 'figure'),
-    Input('symbols-graph', 'clickData'),)  
+    Input('symbols-graph', 'clickData'),)
 def select_industry(data):
     if data is None:
         return {}
@@ -151,9 +152,9 @@ def select_industry(data):
     symbol = data['points'][0]['customdata'][1]
     if market == 'SSE':
         market = 'SHSE'
-    
+
     symbol = market + '.' + symbol
     return pnf.plot_pnf(symbol, return_figure=True)
 
 if __name__ == '__main__':
-    app.run_server(debug=True, host='127.0.0.1', port=80)
+    app.run_server(debug=True, host='127.0.0.1', port=9090)

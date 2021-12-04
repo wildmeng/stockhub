@@ -7,6 +7,7 @@ import gm.api as gm
 import glob
 import os
 from pathlib import Path
+import utils
 
 gm.set_token('0147eee0d2783671c80d7a618d3fa7a6cc7c9778')
 
@@ -69,7 +70,7 @@ def get_pause_zone(pnf):
             common = result
         else:
             break
-    
+
     return cnt, min(common)
 
 def get_vert_len(pnf, val, start_col):
@@ -109,22 +110,22 @@ def get_accum_pattern(pnf):
 
     pnf_min, pnf_max = get_pnf_max_min(pnf, total-1, vcol)
     return vcol, v, pnf_min, pnf_max
-   
+
 
 def plot_pnf(symbol, box_size=3, box_percent=True, reverse=3, return_figure=False, yahool=False):
     if yahool:
         df = yf.Ticker(symbol).history(period='max')
     else:
         df = download_china(symbol, 10000)
-        
+
     if df is None or len(df) == 0:
         print('failed to get history data ')
         return
 
     closes = df['Close'].round(2)
     data, dates, box = get_pnf_data(closes, box_size, box_percent, reverse)
-    
-    if box <= 0.01: 
+
+    if box <= 0.01:
         print('invalid box size')
         return
 
@@ -143,35 +144,35 @@ def plot_pnf(symbol, box_size=3, box_percent=True, reverse=3, return_figure=Fals
             x2 += [i]*len(v)
             y2 += v
             date2 += [str(dates[i].date())]*len(v)
-        
+
     trace1 = {
-    "mode": "markers", 
-    "name": "Up", 
-    "type": "scatter", 
-    "x": x1, 
-    "y": y1, 
+    "mode": "markers",
+    "name": "Up",
+    "type": "scatter",
+    "x": x1,
+    "y": y1,
     "marker": {
-        "size": 5, 
-        "color": "rgba(255, 0, 0, 0.9)", 
+        "size": 5,
+        "color": "rgba(255, 0, 0, 0.9)",
         #"symbol": "square"
-    }, 
+    },
     "text": date1,
     }
     trace2 = {
-    "mode": "markers", 
-    "name": "Down", 
-    "type": "scatter", 
-    "x": x2, 
-    "y": y2, 
+    "mode": "markers",
+    "name": "Down",
+    "type": "scatter",
+    "x": x2,
+    "y": y2,
     "marker": {
-        "size": 5, 
-        "color": "rgba(0, 255, 0, 0.9)", 
+        "size": 5,
+        "color": "rgba(0, 255, 0, 0.9)",
         #"symbol": 34
-    }, 
+    },
     "text": date2,
     }
 
-    
+
     dict_of_fig = dict({
         "data": [trace1, trace2],
         "layout": {"title": {"text": f"{symbol} pnf box:{box} %{box_size} reverse:{reverse}"},
@@ -179,7 +180,7 @@ def plot_pnf(symbol, box_size=3, box_percent=True, reverse=3, return_figure=Fals
     })
 
     fig = go.Figure(dict_of_fig)
-    
+
     _end = len(data) - 1
     start, val, _min, _max = get_accum_pattern(data)
     if (_end - start > 4):
@@ -205,7 +206,7 @@ def plot_pnf(symbol, box_size=3, box_percent=True, reverse=3, return_figure=Fals
 
 def download_china(symbol, period):
     today = datetime.now()
-    
+
     df = gm.history_n(symbol=symbol, frequency='1d', count=period, fields='close,bob',
             fill_missing='Last', adjust=gm.ADJUST_PREV, end_time=today, df=True)
     df.rename(columns = {'bob':'Date', 'close': 'Close'}, inplace=True)
@@ -213,12 +214,8 @@ def download_china(symbol, period):
     return df
 
 def scan_market(market, downloader, box_size=3, reverse=3):
-    home = str(Path.home())
-    list_of_files = glob.glob(f'{home}\\Downloads\\{market}*.csv')
-    latest_file = max(list_of_files, key=os.path.getctime)
-    print(latest_file)
-    stock_df = pd.read_csv(latest_file, dtype={'商品代码':'string'})
-    
+    stock_df = utils.read_latest_csv()
+
     #targets = {x: [] for x in box_size}
     #currents = {x: [] for x in box_size}
     accums = []
@@ -243,7 +240,7 @@ def scan_market(market, downloader, box_size=3, reverse=3):
 
         currents.append(int((last-closes.iloc[0])/box) - val)
         accums.append(len(pnf) - start)
-    
+
     stock_df['accums'] = accums
     stock_df['currents'] = currents
     stock_df.to_csv(f'data/{market}-last.csv', index=False)

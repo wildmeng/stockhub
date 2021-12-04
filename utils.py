@@ -25,17 +25,22 @@ def _splitSymbol(symbol):
     sep = '.'
     if ':' in symbol:
         sep = ':'
-    
+
     code = symbol.split(sep)[1]
     market = symbol.split(sep)[0]
     return market, code
 
 class MyStocks:
     def __init__(self):
-        self.df = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string'}, delimiter=',', index_col=False)
+        self.df = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string', '止损价':'string', '目标价':'string'}, delimiter=',', index_col=False)
 
     def getAllSymbols(self):
-        return self.df.apply(lambda row: self._makeSymbol(row), axis=1).to_list()
+        res = self.df.apply(lambda row: self._makeSymbol(row), axis=1)
+        print(res)
+        if len(res) == 0:
+            return []
+        else:
+            return res.to_list()
 
     def get(self, sym, item):
         market, code = _splitSymbol(sym)
@@ -51,7 +56,7 @@ class MyStocks:
                 market = 'SSE'
             row = {"交易所":market, "商品代码":code, item:value, }
             self.df = self.df.append(row, ignore_index=True, )
-        
+
     def addStock(self, symbol):
         market, code = _splitSymbol(symbol)
         code_list = self.df['商品代码']
@@ -61,7 +66,7 @@ class MyStocks:
 
         if market == 'SHSE':
             market = 'SSE'
-            
+
         row = {"交易所":market, "商品代码":code}
         self.df = self.df.append(row, ignore_index=True, )
 
@@ -73,14 +78,13 @@ class MyStocks:
             return
 
         self.df = self.df[self.df['商品代码'] != code]
-        print(self.df)
 
     def flush(self):
         #self.df.fillna(0, inplace=True)
         #print(self.df)
         self.df.to_csv('data/my-list.csv', index=False)
 
-    
+
     def _makeSymbol(self, row):
         market = row['交易所']
         if market == 'SSE':
@@ -92,10 +96,12 @@ class MyStocks:
         result = []
         for index, row in self.df.iterrows():
             change = (row['调仓至'])
-            value = row['持有市值']
+            avail = row['可用数量']
             if math.isnan(change) or change == '':
                 continue
-            result.append([self._makeSymbol(row), change, value])
+            if change == 0.0 and avail == 0:
+                continue
+            result.append([self._makeSymbol(row), change, avail])
         result.sort(reverse=True, key=lambda x: x[2] - x[1])
         return result
 
@@ -105,20 +111,11 @@ class MyStocks:
             avail = (row['可用数量'])
             if avail <= 0:
                 continue
-            
+
             target = (row['目标价'])
             stop = (row['止损价'])
-            value = row['持有市值']
-            if math.isnan(value) or value == 0 or value == '0':
-                continue
+            result.append([self._makeSymbol(row), stop, target])
 
-            if math.isnan(target) and math.isnan(stop):
-                continue
-            if target == 0 and stop == 0 or target == '0' and stop == '0':
-                continue
-
-            result.append(self._makeSymbol(row))
-            
         return result
 
 if __name__ == "__main__":

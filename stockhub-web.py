@@ -12,25 +12,20 @@ import pandas as pd
 import json
 import math
 
-n_col = 2
-n_row = 20
+n_col = 3
+n_row = 30
 
-tabs_name = '行业'
-df = utils.read_latest_csv()
-jq_industry = pd.read_csv('data/jq-industries.csv', sep=':')
-industries = jq_industry['name'].unique()
-
-industries = np.append(industries, ['加密货币', '期货', '持有'])
+markets = ['china', 'america', '持有']
 app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=False)
 
 tv_style={'width': '96%', 'height':'350px', 'marginLeft': '2%', "marginRight": "2%"}
 
 tabs = dbc.Tabs(
             [
-                dbc.Tab(label=x, tab_id=x)  for x in industries
+                dbc.Tab(label=x, tab_id=x)  for x in markets
             ],
             id="tabs",
-            active_tab= '持有'# industries[0],
+            active_tab= markets[0],
         )
 def cell(row, col):
     id = (row-1)*n_col + (col-1)
@@ -45,7 +40,7 @@ rows = [
             ],
             align="top",
             no_gutters = True,
-        ) for row in range(1, n_row+1) ]
+        ) for row in range(1, n_row+1)]
 
 app.layout = dbc.Container( [tabs] + rows + [html.Div(id='null', style={'height':'10px'}),
         html.Div(id='symbols', style={'display':'none'}),
@@ -116,23 +111,9 @@ def get_sym(row):
 def get_position(row):
     return {'symbol' : row['交易所'] + ':' + row['商品代码'], 'volume': row['持有数量']}
 
-def get_crypts():
-    cryp_df = utils.read_latest_csv('crypto')
-
-    cryp_df = cryp_df[cryp_df['说明'].str.endswith('US Dollar (calculated by TradingView)')]
-    #print(cryp_df)
-    cryptos = cryp_df.sort_values(by=['市场价值'], ascending=False).head(n_col*n_row)
-    results = cryptos.apply(get_sym, axis=1).to_list()
-    print(results)
-    return (results)
-
-def get_cfd():
-    return ['OANDA:XAUUSD','OANDA:XAGUSD','OANDA:EURUSD','OANDA:WTICOUSD']
-
 all_ouputs = [Output('symbols', 'children')] + [Output(f'div{i}', 'children') for i in range(n_col*n_row)]
 
 def get_pos_div(i, row):
-    #vol = row['持有数量']
     value = (row['持有市值'])
     if math.isnan(value):
         value = 0
@@ -157,22 +138,14 @@ def select_industry(tab):
         return ''
 
     print('selected tab', tab)
-
-    if tab == '加密货币':
-        stocks = get_crypts()
-    elif tab == '期货':
-        stocks = get_cfd()
-    elif tab == '持有':
+    if tab == '持有':
         mylist = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string'}, delimiter=',')
         print(mylist)
         stocks = mylist.apply(get_sym, axis=1).to_list()
         print('positions:', stocks)
     else:
-        stocks = jq_industry[jq_industry['name'] == tab]['symbols'].iloc[0].split(',')
-        stocks = map(lambda x: x.split('.')[0], stocks)
-        stocks = df[df['商品代码'].isin(stocks)]
-        stocks = stocks.sort_values(by=['市场价值'], ascending=False).head(n_col*n_row)
-        #stocks = stocks.sort_values(by=['RSI(14)'], ascending=False).head(n_col*n_row)
+        stocks = utils.read_latest_csv(tab)
+        stocks = stocks.sort_values(by=['PauseDays'], ascending=False).head(n_col*n_row)
         stocks = stocks.apply(get_sym, axis=1).to_list()
 
     divs = []

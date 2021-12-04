@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import gm.api as gm
 from datetime import datetime, timedelta
+from numpy import average
 import pandas as pd
 import yfinance as yf
 import MetaTrader5 as mt5
@@ -16,7 +17,7 @@ xm_path = "C:\\Program Files\\XM MT5\\terminal64.exe"
 if not mt5.initialize(path=xm_path):
     print("initialize() failed")
     mt5.shutdown()
-  
+
 def download_yh(exchange, code, period):
     t = datetime.now() - timedelta(days=3*365)
     if exchange == 'HKEX':
@@ -26,7 +27,7 @@ def download_yh(exchange, code, period):
             code = code + '.' + 'HK'
     else:
         if '.' in code:
-            code = code.replace('.', '-')  
+            code = code.replace('.', '-')
         elif '/' in code:
             code = code.replace('/', '.')
 
@@ -62,63 +63,67 @@ def download_china(exchange, code, period):
     if exchange == 'SSE':
         exchange = 'SHSE'
     symbol = exchange + '.' + code
-    return gm.history_n(symbol=symbol, frequency='1d', count=period*3, fields='close',
+    return gm.history_n(symbol=symbol, frequency='1d', count=period, fields='close,low',
             fill_missing='Last', adjust=gm.ADJUST_PREV, end_time=today, df=True)
 
-def do_ma250(market, downloader):
+def filter_1(row, downloader):
+    data = downloader(row['交易所'], row['商品代码'], 3000)
+    if data is None or 'close' not in data:
+        return pd.Series([0], index=['PauseDays'])
+
+    close = data['close']
+    if len(close) < 500:
+        return False
+
+    # arguments
+    average = 100
+    range_percents = 20
+    max_outof_range = 200
+    min_range_len = 500
+
+    print(row['商品代码'])
+    mean = close[-average:].mean()
+    upper = mean*(1.0 + range_percents/200.0)
+    lower = mean*(1.0 - range_percents/200.0)
+
+    #print(close[::-1])
+    outof_range = 0
+    index = 0
+    outof_range_start = 0
+    for price in close[::-1]:
+        index += 1
+        if price > upper or price < lower:
+            if outof_range == 0:
+                outof_range_start = index
+            outof_range += 1
+        else:
+            outof_range = 0
+        if outof_range > max_outof_range:
+            break
+
+    return pd.Series([outof_range_start], index=['PauseDays'])
+
+def filter_2(row, downloader):
+    data = downloader(row['交易所'], row['商品代码'], 3000)
+    if data is None or 'close' not in data:
+        return pd.Series([0], index=['PauseDays'])
+
+def do_search(market, downloader, filter):
     home = str(Path.home())
     list_of_files = glob.glob(f'{home}\\Downloads\\{market}*.csv')
     latest_file = max(list_of_files, key=os.path.getctime)
     print(latest_file)
     df = pd.read_csv(latest_file, dtype={'商品代码':'string'})
-    period = 250
-    above_ma1_percents = []
-    above_ma2_percents = []
-    max_change = []
-    for index, row in df.iterrows():
-        data = downloader(row['交易所'], row['商品代码'], period)
-        if data is None or len(data) < period*3-1:
-            above_ma1_percents.append(-1)
-            above_ma2_percents.append(-1)
-            max_change.append(-1)
-            continue
+    print('total', len(df))
+    #df = df[df['RSI(14)'] > 40]
+    df_res = df.apply(filter, axis=1, args=(downloader,), )
+    df_res = pd.concat([df, df_res], axis=1, join='inner')
+    df_res = df_res[df_res['PauseDays'] > 500]
+    print('total', len(df_res))
+    df_res.to_csv(f'data/{market}-result.csv', index=True)
 
-        _max = data['close'].iloc[-period:].max()
-        _min = data['close'].iloc[-period:].min()
-        change = int((_max - _min)*100/_min)
-        if change < 0:
-            above_ma1_percents.append(-1)
-            above_ma2_percents.append(-1)
-            max_change.append(-1)
-            continue
-
-        ma = data['close'].rolling(window=period).mean()
-        if ma.iloc[-1] <= ma.iloc[-2]:
-            above_ma1_percents.append(-1)
-            above_ma2_percents.append(-2)
-            max_change.append(-1)
-            continue
-
-        max_change.append(change)
-
-        ma_diff = data['close'] - ma
-        ma_diff1 = ma_diff[-period:]
-        diff1 = ma_diff1[ma_diff1 > 0]
-
-        above_ma1_percents.append(int(100*len(diff1)/period))
-
-        ma_diff2 = ma_diff[-2*period:-period]
-        diff2 = ma_diff2[ma_diff2 > 0]
-        above_ma2_percents.append(int(100*len(diff2)/period))
-
-    df['aboveMa1'] = above_ma1_percents
-    df['aboveMa2'] = above_ma2_percents
-    df['maxChange'] = max_change
-    df.to_csv(f'data/{market}-last.csv', index=False)
-    print(df.head(10))
-
-do_ma250('xm-cfd', download_mt5)
+#do_ma250('xm-cfd', download_mt5)
 #do('future', download_china)
 #do('hongkong', download_yh)
-#do('china', download_china)
+do_search('china', download_china, filter_1)
 #do('america', download_yh)
