@@ -75,6 +75,8 @@ def cleanTA(context):
     
 def init(context):
     updateStocks(context)
+    do_stop(context)
+    schedule(schedule_func=cleanTA, date_rule='1d', time_rule='09:00:00')
     schedule(schedule_func=trade, date_rule='1d', time_rule='14:50:00')
 
     #schedule(schedule_func=do_subscribe, date_rule='1d', time_rule='09:30:00')
@@ -120,27 +122,39 @@ def atr(N=14):
     if len(bars) != N+1:
         logging.error("history_n failed")
         sys.exit()
-    
-    atr = [(max(bars[i].high, bars[i-1].close) - min(bars[i].low, bars[i-1].close)) for i in range(1, N+1)]
+        
+    atr = [(max(bars[i]['high'], bars[i-1]['close']) - min(bars[i]['low'], bars[i-1]['close'])) for i in range(1, N+1)]
     res = sum(atr)/len(atr)
     gatrbuf[atr_id] = res
     return res
 
-def do_stop_loss(context):
+def do_stop(context):
     global gsymbol, gcontext
     if not isTradingDay(context):
         return
 
     lst = context.stocks.getWatchList()
     for l in lst:
-        if not isinstance(l[1], str):
+        if not isinstance(l[1], str) and not isinstance(l[2], str):
             continue
         gsymbol = l[0]
         update_p()
-        if eval(l[1]) == True:
-            order_target_percent(symbol=gsymbol, percent=0,
+        if (isinstance(l[1], str) and eval(l[1]) == True) or (isinstance(l[2], str) and eval(l[2]) == True):
+            logging.info('stopped trading for', l[0], l[1], l[2])
+            order = order_target_percent(symbol=gsymbol, percent=0,
                 position_side=PositionSide_Long, order_type=OrderType_Market, price=0)
+            logging.info('order:', order)
 
+def buy(percent):
+    order = order_percent(symbol=gsymbol, percent=percent/100.0,
+                side=OrderSide_Buy, order_type=OrderType_Market, position_effect=PositionEffect_Open, price=0)
+    logging.info('buy order:', order)
+
+def target(percent):
+    order = order_target_percent(symbol=gsymbol, percent=percent/100.0,
+                position_side=PositionSide_Long, order_type=OrderType_Market, price=0)
+    logging.info('target order:', order)
+    
 def do_unsubscribe(context):
     return
     if not isTradingDay(context):

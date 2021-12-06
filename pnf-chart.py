@@ -17,7 +17,6 @@ import numpy as np
 import dash_bootstrap_components as dbc
 import pnf
 
-
 df = pd.read_csv('data/china-last.csv', dtype={'商品代码':'string'})
 
 df.sort_values(by=['accums'], inplace=True, ascending=False)
