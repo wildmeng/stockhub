@@ -26,17 +26,22 @@ def _splitSymbol(symbol):
     if ':' in symbol:
         sep = ':'
 
+    if sep not in symbol:
+        return symbol
+
     code = symbol.split(sep)[1]
     market = symbol.split(sep)[0]
     return market, code
 
 class MyStocks:
     def __init__(self):
-        self.df = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string', '止损价':'string', '目标价':'string'}, delimiter=',', index_col=False)
+        self.df = pd.read_csv('data/my-list.csv', 
+        dtype={'商品代码':'string', 'stop':'string',
+         'target':'string','open':'string','close':'string'}, delimiter=',', index_col=False)
 
     def getAllSymbols(self):
         res = self.df.apply(lambda row: self._makeSymbol(row), axis=1)
-        print(res)
+        # print(res)
         if len(res) == 0:
             return []
         else:
@@ -55,7 +60,7 @@ class MyStocks:
             if market == 'SHSE':
                 market = 'SSE'
             row = {"交易所":market, "商品代码":code, item:value, }
-            self.df = self.df.append(row, ignore_index=True, )
+            self.df = self.df.append(row, ignore_index=True, ) 
 
     def addStock(self, symbol):
         market, code = _splitSymbol(symbol)
@@ -105,19 +110,17 @@ class MyStocks:
         result.sort(reverse=True, key=lambda x: x[2] - x[1])
         return result
 
-    def getWatchList(self):
+    def getOrder(self, name):
         result = []
         for index, row in self.df.iterrows():
-            avail = (row['可用数量'])
-            if avail <= 0:
+            order = (row[name])
+            if pd.isnull(order) or order.strip() == '' or order.startswith('#'):
                 continue
 
-            target = (row['目标价'])
-            stop = (row['止损价'])
-            result.append([self._makeSymbol(row), stop, target])
+            result.append([self._makeSymbol(row), order])
 
         return result
 
 if __name__ == "__main__":
     stocks = MyStocks()
-    print(stocks.get('SSE.600538', '止损价'))
+    print(stocks.getOrder('open'))
