@@ -1,16 +1,12 @@
 # coding=utf-8
 from gm.api import *
-from gm.enum import MODE_BACKTEST, MODE_LIVE, OrderSide_Sell
+from gm.enum import MODE_BACKTEST,MODE_LIVE,OrderSide_Sell
 import numpy as np
 import pandas as pd
 import utils
-import json
 import datetime
 import time
-import os
 import sys
-import logging
-import psutil
 from loguru import logger
 
 
@@ -21,7 +17,7 @@ p = None
 gmabuf = {}
 gatrbuf = {}
 
-def isTradingDay(context):
+def checkTradingDay(context):
     today = datetime.date.today()
     start = today.strftime("%Y-%m-%d")
     next = datetime.datetime.now() + datetime.timedelta(days=1)
@@ -31,9 +27,10 @@ def isTradingDay(context):
     if start in dates:
         return True
     else:
-        return False
+        print('not trading day')
+        sys.exit()
 
-def updateStocks(context):
+def checkAccount(context):
     if context.account() is None:
         print('failed to get account')
         sys.exit()
@@ -42,20 +39,26 @@ def updateStocks(context):
     if cash is None or cash.nav == 0:
         print('failed to get cash')
         sys.exit()
+
+    # if context.account().status != 2:
+    #     print('account is not connected')
+    #     sys.exit()
+    
+    # print('context.account().status=', context.account().status)
+def updateStocks(context):
+    checkAccount(context)
     
     context.stocks = utils.MyStocks()
 
     positions = context.account().positions()
     allSymbols = []
     for pos in positions:
-        context.stocks.update(pos['symbol'], '可用数量', int(pos['available_now']))
         context.stocks.update(pos['symbol'], '持有市值', int(pos['market_value']))
         allSymbols.append(pos['symbol'])
 
     syms = context.stocks.getAllSymbols()
     for sym in syms:
         if sym not in allSymbols:
-            context.stocks.update(sym, '可用数量', 0)
             context.stocks.update(sym, '持有市值', 0)
     context.stocks.flush()
 
@@ -82,8 +85,6 @@ def cleanTA(context):
 def trade_order(context, order_name):
     global gsymbol, gcontext
 
-    if not isTradingDay(context):
-        return
     updateStocks(context)
     logger.info(order_name)
     context.stocks = utils.MyStocks()
@@ -106,13 +107,6 @@ def trade_order(context, order_name):
                     position_side=PositionSide_Long, order_type=OrderType_Market, price=0)
                 logger.info(f'stopped order result:{order}')
                 context.stocks.update(gsymbol, 'stop', '# ' + code)
-        elif order_name == 'target':
-             if (is_num and p >= float(code)) or (not is_num and eval(code) == True):
-                logger.info('targeting order {gsymbol}')
-                order = order_target_percent(symbol=gsymbol, percent=0,
-                    position_side=PositionSide_Long, order_type=OrderType_Market, price=0)
-                logger.info('targetted order result: {order}')
-                context.stocks.update(gsymbol, 'target', '# ' + code)
         else :
             logger.info('executing {}', code)
             eval(code)
@@ -123,18 +117,36 @@ def trade_order(context, order_name):
     updateStocks(context)
 
 def init(context):
+    checkTradingDay(context)
+    checkAccount(context)
+    cleanTA(context)
     logger.add("file_trade.log")
-    
+    # logger.info('init')
     updateStocks(context)
     logger.info('started')
-    schedule(schedule_func=cleanTA, date_rule='1d', time_rule='09:00:10')
-    schedule(schedule_func=lambda ctx: trade_order(ctx, 'open'), date_rule='1d', time_rule='09:35:00')
-    targets_time = ['09:33:00', '09:53:00', '10:53:00', '13:53', '14:53:00']
-    for t in targets_time:
-        schedule(schedule_func=lambda ctx: trade_order(ctx, 'target'), date_rule='1d', time_rule=t)
-
+    schedule(schedule_func=lambda ctx: trade_order(ctx, 'open'), date_rule='1d', time_rule='09:00:00')
     schedule(schedule_func=lambda ctx: trade_order(ctx, 'close'), date_rule='1d', time_rule='14:50:00')
-    schedule(schedule_func=lambda ctx: trade_order(ctx, 'stop'), date_rule='1d', time_rule='14:55:00')
+    schedule(schedule_func=lambda ctx: trade_order(ctx, 'stop'), date_rule='1d', time_rule='14:53:00')
+    schedule(schedule_func=lambda ctx: sys.exit(), date_rule='1d', time_rule='15:01:00')
+    lst = context.stocks.getOrder('target')
+    if len(lst) > 0:
+        target_symbols = [l[0] for l in lst]
+        logger.info(f'targets:{str(lst)}')
+        subscribe(symbols=','.join(target_symbols), frequency="tick")
+
+def on_tick(context, tick):
+    # print('tick:', tick)
+    target = float(context.stocks.get(tick['symbol'], 'target'))
+    value = float(context.stocks.get(tick['symbol'], '持有市值'))
+    print('target:', target, 'price:', tick['price'])
+    if value > 0 and target > 0 and tick['price'] > target:
+        print('target order')
+        sym = tick['symbol']
+        order = order_target_percent(symbol=sym, percent=0,
+                position_side=PositionSide_Long, order_type=OrderType_Market, price=0)
+        logger.info(f'targetted {sym} result: {order}')
+        time.sleep(2)
+        updateStocks(context)
 
 def on_order_status(context, order):
     logger.info('order status: {} {} {}', order.symbol, order.status, order.volume)
@@ -150,7 +162,7 @@ def update_p():
         sys.exit()
     
     p = price
-    logger.info(f'price {gsymbol}: {p}')
+    # logger.info(f'price {gsymbol}: {p}')
     
 def pma(N=60, n=14):
     return (p - ma(N))/atr(n)
@@ -190,10 +202,10 @@ def buy_percent(percent):
     order = order_percent(symbol=gsymbol, percent=percent/100.0,
                 side=OrderSide_Buy, order_type=OrderType_Market, position_effect=PositionEffect_Open, price=0)
 
-def buy_target(percent):
+def target(percent, price=0):
     logger.info('{gsymbol}, {percent}')
     order = order_target_percent(symbol=gsymbol, percent=percent/100.0,
-                position_side=PositionSide_Long, order_type=OrderType_Market, price=0)
+                position_side=PositionSide_Long, order_type=OrderType_Market, price=price)
 
 def buy_vol(vol):
     logger.info(f'{gsymbol}, {vol}')

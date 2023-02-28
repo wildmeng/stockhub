@@ -22,6 +22,7 @@ stocks = []
 stocks_page = []
 tabs_name = '行业'
 fav_df = pd.read_csv('data/favorite.csv', dtype={'code':'string'}, delimiter=',', index_col=False)
+my_df = None
 df = utils.read_latest_csv()
 industries = df['行业'].unique()
 industries = np.append(industries, ['加密货币', '期货', '持有', '自选'])
@@ -62,7 +63,7 @@ app = dash.Dash(external_stylesheets=[
                 dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
 tv_style = {'width': '96%', 'height': '350px',
-            'marginLeft': '0%', "marginRight": "2%", 'position': 'obsolute'}
+            'marginLeft': '0%', "marginRight": "2%"}
 
 tabs = html.Div(id='tabs-div')
 pages = html.Div(id='pages-div')
@@ -77,8 +78,22 @@ def cell(row, col):
    
     if stocks_page[id] in fav_df['code'].values:
         button_type = 'Del'
-    button = html.Button(button_type, id={'type':button_type, 'index':id}, style={'position':'absolute', 'left':'0', 'top':'0', 'z-index': '0'})
-    return html.Div(children=[html.Div(id=f"tv{id}", style=tv_style), button], style={'position': 'relative'})
+
+    code = stocks_page[id].split(':')[1]
+    if code in my_df['商品代码'].values:
+        values = my_df[my_df['商品代码'] == code]
+        value = values['持有市值'].values[0]
+        stop_price = values['stop'].values[0]
+        target_price = values['target'].values[0]
+        button = html.Button('Del', id={'type':'Del', 'index':id}, style={'margin': '10px'})
+        stop = dcc.Input(id={'type':'stop', 'index':id}, type='number', min=0, max=10000, step=0.1, value=stop_price, style={'margin': '10px'})
+        target = dcc.Input(id={'type':'target', 'index':id}, type='number', min=0, max=10000, step=0.1, value=target_price, style={'margin': '10px'})
+      
+        my_div = html.Div(children=[html.Label(f"持{value}", style={'margin': '10px'}), html.Label("止: "), stop, html.Label("停: "), target])
+        return html.Div(children=[my_div, html.Div(id=f"tv{id}", style=tv_style)])
+    else:
+        button = html.Button(button_type, id={'type':button_type, 'index':id}, style={'position':'absolute', 'left':'0', 'top':'0', 'z-index': '0'})
+        return html.Div(children=[html.Div(id=f"tv{id}", style=tv_style), button], style={'position': 'relative'})
 
 def creat_row(stocks, row, total_rows):
     if row < total_rows:
@@ -96,7 +111,7 @@ div_tv = html.Div(id='div-tv', children='')
 app.layout = dbc.Container([opts, tabs, pages] + [div_tv] + [html.Div(id='null', style={'height': '10px'}),
                                                   html.Div(id='symbols', style={
                                                       'display': 'none'}),
-                                                  html.Div(id='handlers', style={'display': 'none'})], fluid=True,
+                                                  html.Div(id='handlers', style={'display': 'none'}), html.Div(id='handlers2', style={'display': 'none'})], fluid=True,
                            )
 
 app.clientside_callback(
@@ -110,7 +125,7 @@ app.clientside_callback(
             {
             "autosize": true,
             "width":400,
-            "heigth":400,
+            "height":400,
             "symbol": symbol,
             "timezone": "Asia/Shanghai",
             "interval": "D",
@@ -119,7 +134,7 @@ app.clientside_callback(
             "locale": "zh_CN",
             "toolbar_bg": "#f1f3f6",
             "enable_publishing": false,
-            //"range": "60M",
+            "range": "60M",
             "details": false,
             "allow_symbol_change": false,
             "hide_side_toolbar": true,
@@ -128,6 +143,7 @@ app.clientside_callback(
             "container_id": div,
             });
         }
+
 
         const TOTAL_STOCKS = 30;
         function create_tv_grid() {
@@ -206,6 +222,8 @@ def select_industry(tab, sortby, opts):
     elif tab == '持有':
         mylist = pd.read_csv('data/my-list.csv',
                              dtype={'商品代码': 'string'}, delimiter=',')
+        
+        mylist = mylist.sort_values(by=['持有市值'], ascending=False)
         stocks = mylist.apply(get_sym, axis=1).to_list()
         # print('positions:', stocks)
     else:
@@ -237,11 +255,11 @@ def select_industry(tab, sortby, opts):
     Input('tab_pages', 'active_tab'))
 def select_page(page_str):
     global stocks_page
+    global my_df
     if page_str is None:
         page_str = page_state[page_state['tab']]['page']
 
     page = int(page_str)
-    
 
     n_pages = (len(stocks) + n_col*n_row - 1)//(n_col*n_row)
     if page > n_pages:
@@ -253,6 +271,8 @@ def select_page(page_str):
     print('selected page', page)
     start = n_col*n_row*(page-1)
     stocks_page = stocks[start:start+n_col*n_row]
+    my_df = pd.read_csv('data/my-list.csv', dtype={'商品代码':'string'}, delimiter=',', index_col=False)
+
     return [create_tv(stocks_page), ','.join(stocks[start:start+n_col*n_row])]
     # return 
 
@@ -280,16 +300,18 @@ def handler(*args):
     trigger = callback_context.triggered[0]
     try:
         obj = json.loads(trigger['prop_id'].split('.')[0])
+        if trigger['value'] is None:
+            return
         if obj['type'] == 'Add':
-            print('addstock', obj['index'], stocks_page)
             addStock(stocks_page[obj['index']])
         elif obj['type'] == 'Del':
-            print('delStock', obj['index'], stocks_page)
             delStock(stocks_page[obj['index']])
         # action_handler(obj['type'], syms[obj['index']], trigger['value'])
     except ValueError as e:
-        return
+        return ''
 
+    return ''
+    
 @app.callback(
     Output('tabs-div', 'children'),
     Input('header', 'children'))
@@ -301,6 +323,34 @@ def select_tab(children):
         id="tabs",
         active_tab=page_state['tab']
     )
+
+def action_handler(action, symbol, value):
+    print(action, symbol, value)
+    stocks = utils.MyStocks()
+    if action == 'target':
+        stocks.update(symbol, 'target', str(value))
+    elif action == 'stop':
+        stocks.update(symbol, 'stop', str(value))
+    else:
+        print('unknown action', action)
+        return
+
+    stocks.flush()
+
+@app.callback(
+    Output('handlers2', 'children'),
+    [Input({'type': 'stop', 'index': ALL}, 'value'),
+    Input({'type': 'target', 'index': ALL}, 'value')])
+def handler(*args):
+    trigger = callback_context.triggered[0]
+    
+    if trigger['value'] is None:
+        return ''
+    try:
+        obj = json.loads(trigger['prop_id'].split('.')[0])
+        action_handler(obj['type'], stocks_page[obj['index']], trigger['value'])
+    except ValueError as e:
+        return ''
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=8888,

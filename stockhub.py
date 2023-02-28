@@ -16,6 +16,7 @@ import gm.api as gm
 import glob
 import yfinance as yf
 import MetaTrader5 as mt5
+
 '''
 gm.set_token('0147eee0d2783671c80d7a618d3fa7a6cc7c9778')
 ic_path = "C:\\Program Files\\ICMarkets - MetaTrader 5\\terminal64.exe"

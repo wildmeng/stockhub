@@ -97,19 +97,6 @@ class MyStocks:
 
         return market + '.' + row['商品代码']
 
-    def getChangeList(self):
-        result = []
-        for index, row in self.df.iterrows():
-            change = (row['调仓至'])
-            avail = row['可用数量']
-            if math.isnan(change) or change == '':
-                continue
-            if change == 0.0 and avail == 0:
-                continue
-            result.append([self._makeSymbol(row), change, avail])
-        result.sort(reverse=True, key=lambda x: x[2] - x[1])
-        return result
-
     def getOrder(self, name):
         result = []
         for index, row in self.df.iterrows():
